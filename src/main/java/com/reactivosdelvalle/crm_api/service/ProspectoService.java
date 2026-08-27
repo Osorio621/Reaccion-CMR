@@ -1,8 +1,10 @@
 package com.reactivosdelvalle.crm_api.service;
 
 import com.reactivosdelvalle.crm_api.dto.request.ConvertirProspectoRequest;
+import com.reactivosdelvalle.crm_api.dto.request.OportunidadRequest;
 import com.reactivosdelvalle.crm_api.dto.request.ProspectoRequest;
 import com.reactivosdelvalle.crm_api.dto.response.ClienteResponse;
+import com.reactivosdelvalle.crm_api.dto.response.ConvertirProspectoResponse;
 import com.reactivosdelvalle.crm_api.dto.response.ProspectoResponse;
 import com.reactivosdelvalle.crm_api.entity.Cliente;
 import com.reactivosdelvalle.crm_api.entity.Prospecto;
@@ -34,6 +36,7 @@ public class ProspectoService {
     private final SecurityUtils securityUtils;
     private final ProspectoMapper prospectoMapper;
     private final ClienteMapper clienteMapper;
+    private final OportunidadService oportunidadService;
 
     @Autowired
     public ProspectoService(
@@ -43,7 +46,8 @@ public class ProspectoService {
             UsuarioRepository usuarioRepository,
             SecurityUtils securityUtils,
             ProspectoMapper prospectoMapper,
-            ClienteMapper clienteMapper) {
+            ClienteMapper clienteMapper,
+            OportunidadService oportunidadService) {
         this.prospectoRepository = prospectoRepository;
         this.clienteRepository = clienteRepository;
         this.catalogoRepository = catalogoRepository;
@@ -51,6 +55,7 @@ public class ProspectoService {
         this.securityUtils = securityUtils;
         this.prospectoMapper = prospectoMapper;
         this.clienteMapper = clienteMapper;
+        this.oportunidadService = oportunidadService;
     }
 
     @Transactional(readOnly = true)
@@ -142,7 +147,7 @@ public class ProspectoService {
     }
 
     @Transactional
-    public ClienteResponse convertir(Long id, ConvertirProspectoRequest request) {
+    public ConvertirProspectoResponse convertir(Long id, ConvertirProspectoRequest request) {
         UsuarioPrincipal usuario = securityUtils.getUsuarioActual();
         Prospecto prospecto = getActivo(id);
         verificarAcceso(prospecto);
@@ -182,7 +187,37 @@ public class ProspectoService {
         prospecto.setClienteId(guardado.getId());
         prospectoRepository.save(prospecto);
 
-        return clienteMapper.toResponse(guardado);
+        // Oportunidad inicial opcional: se crea en esta misma transacción con
+        // todas las validaciones de Regla de Oro del OportunidadService
+        var oportunidadCreada = java.util.Optional.ofNullable(request.getOportunidad())
+                .map(bloque -> construirOportunidadRequest(bloque, prospecto))
+                .map(oportunidadService::create)
+                .orElse(null);
+
+        return ConvertirProspectoResponse.builder()
+                .cliente(clienteMapper.toResponse(guardado))
+                .oportunidad(oportunidadCreada)
+                .build();
+    }
+
+    private OportunidadRequest construirOportunidadRequest(
+            ConvertirProspectoRequest.OportunidadInicial bloque, Prospecto prospecto) {
+        OportunidadRequest request = new OportunidadRequest();
+        request.setNombre(bloque.getNombre());
+        // El cliente y el vínculo con el prospecto los define la conversión
+        request.setClienteId(prospecto.getClienteId());
+        request.setProspectoId(prospecto.getId());
+        // El responsable del negocio es quien traía el prospecto
+        request.setEjecutivoId(prospecto.getResponsableId());
+        request.setEtapaId(bloque.getEtapaId());
+        request.setValor(bloque.getValor());
+        request.setProbabilidad(bloque.getProbabilidad());
+        request.setFechaEstimadaCierre(bloque.getFechaEstimadaCierre());
+        request.setProximaAccion(bloque.getProximaAccion());
+        request.setFechaProximaAccion(bloque.getFechaProximaAccion());
+        request.setDescripcion(bloque.getDescripcion());
+        request.setCompetencia(bloque.getCompetencia());
+        return request;
     }
 
     private Prospecto getActivo(Long id) {

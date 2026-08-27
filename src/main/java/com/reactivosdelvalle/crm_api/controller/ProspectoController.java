@@ -3,6 +3,7 @@ package com.reactivosdelvalle.crm_api.controller;
 import com.reactivosdelvalle.crm_api.dto.request.ConvertirProspectoRequest;
 import com.reactivosdelvalle.crm_api.dto.request.ProspectoRequest;
 import com.reactivosdelvalle.crm_api.dto.response.ClienteResponse;
+import com.reactivosdelvalle.crm_api.dto.response.ConvertirProspectoResponse;
 import com.reactivosdelvalle.crm_api.dto.response.ProspectoResponse;
 import com.reactivosdelvalle.crm_api.service.ProspectoService;
 import jakarta.validation.Valid;
@@ -60,8 +61,8 @@ public class ProspectoController {
 
     @PostMapping("/{id}/convertir")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ClienteResponse> convertir(@PathVariable Long id, @Valid @RequestBody ConvertirProspectoRequest request) {
-        ClienteResponse response = prospectoService.convertir(id, request);
+    public ResponseEntity<ConvertirProspectoResponse> convertir(@PathVariable Long id, @Valid @RequestBody ConvertirProspectoRequest request) {
+        ConvertirProspectoResponse response = prospectoService.convertir(id, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

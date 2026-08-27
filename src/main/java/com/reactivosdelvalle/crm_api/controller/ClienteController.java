@@ -4,7 +4,9 @@ import com.reactivosdelvalle.crm_api.dto.request.ClienteRequest;
 import com.reactivosdelvalle.crm_api.dto.request.ContactoRequest;
 import com.reactivosdelvalle.crm_api.dto.response.ClienteResponse;
 import com.reactivosdelvalle.crm_api.dto.response.ContactoResponse;
+import com.reactivosdelvalle.crm_api.dto.response.SyncTicketResponse;
 import com.reactivosdelvalle.crm_api.service.ClienteService;
+import com.reactivosdelvalle.crm_api.service.TicketsIntegrationService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -20,10 +22,12 @@ import java.util.Map;
 public class ClienteController {
 
     private final ClienteService clienteService;
+    private final TicketsIntegrationService ticketsIntegrationService;
 
     @Autowired
-    public ClienteController(ClienteService clienteService) {
+    public ClienteController(ClienteService clienteService, TicketsIntegrationService ticketsIntegrationService) {
         this.clienteService = clienteService;
+        this.ticketsIntegrationService = ticketsIntegrationService;
     }
 
     @GetMapping
@@ -62,6 +66,20 @@ public class ClienteController {
     @PreAuthorize("hasAnyRole('ADMIN','GERENTE')")
     public ResponseEntity<ClienteResponse> reasignar(@PathVariable Long id, @RequestParam Long nuevoEjecutivoId) {
         return ResponseEntity.ok(clienteService.reasignar(id, nuevoEjecutivoId));
+    }
+
+    /** Boton "Enviar cliente a tickets": envia (o reenvia) el cliente al sistema Next.js. */
+    @PostMapping("/{id}/enviar-tickets")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SyncTicketResponse> enviarTickets(@PathVariable Long id) {
+        return ResponseEntity.ok(ticketsIntegrationService.enviarCliente(id));
+    }
+
+    /** Estado de sincronizacion con tickets (para badge "Enviado"/"Error" en el front). */
+    @GetMapping("/{id}/tickets")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SyncTicketResponse> estadoTickets(@PathVariable Long id) {
+        return ResponseEntity.ok(ticketsIntegrationService.consultarEstado(id));
     }
 
     @GetMapping("/{id}/contactos")
