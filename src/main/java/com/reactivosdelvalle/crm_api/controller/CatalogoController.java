@@ -15,7 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/catalogos")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("isAuthenticated()")
 public class CatalogoController {
 
     private final CatalogoService catalogoService;
@@ -39,17 +39,20 @@ public class CatalogoController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CatalogoResponse> create(@Valid @RequestBody CatalogoRequest request) {
         CatalogoResponse response = catalogoService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CatalogoResponse> update(@PathVariable Long id, @Valid @RequestBody CatalogoRequest request) {
         return ResponseEntity.ok(catalogoService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> delete(@PathVariable Long id) {
         catalogoService.delete(id);
         return ResponseEntity.ok(Map.of("mensaje", "Catálogo eliminado correctamente"));
