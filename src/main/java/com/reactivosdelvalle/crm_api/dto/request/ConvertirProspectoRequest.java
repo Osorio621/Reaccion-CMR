@@ -1,11 +1,13 @@
 package com.reactivosdelvalle.crm_api.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Data
@@ -47,4 +49,38 @@ public class ConvertirProspectoRequest {
     private String notas;
 
     private LocalDate fechaPrimeraCompra;
+
+    /**
+     * OPCIONAL. Si se envía, además del cliente se crea la primera oportunidad
+     * del negocio (Regla de Oro aplicada: nombre, etapa, valor, probabilidad,
+     * fecha estimada de cierre y próxima acción son obligatorios aquí dentro).
+     */
+    @Valid
+    private OportunidadInicial oportunidad;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OportunidadInicial {
+
+        @Size(max = 200, message = "El nombre de la oportunidad no puede superar 200 caracteres")
+        private String nombre;
+
+        private Long etapaId;
+
+        private BigDecimal valor;
+
+        private Integer probabilidad;
+
+        private LocalDate fechaEstimadaCierre;
+
+        @Size(max = 300, message = "La próxima acción no puede superar 300 caracteres")
+        private String proximaAccion;
+
+        private LocalDate fechaProximaAccion;
+
+        private String descripcion;
+
+        private String competencia;
+    }
 }

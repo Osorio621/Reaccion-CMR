@@ -46,6 +46,9 @@ public class Auditoria {
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
+    @Column(name = "descripcion", columnDefinition = "TEXT")
+    private String descripcion;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

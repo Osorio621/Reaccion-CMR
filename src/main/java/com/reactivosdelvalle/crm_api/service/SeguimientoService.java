@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,17 +77,31 @@ public class SeguimientoService {
     @Transactional(readOnly = true)
     public List<SeguimientoResponse> listarVencidos() {
         UsuarioPrincipal usuario = securityUtils.getUsuarioActual();
-        List<Seguimiento> lista;
         LocalDate hoy = LocalDate.now();
+        List<Seguimiento> lista;
 
+        // Busca VENCIDO (ya marcado por el scheduler) O PENDIENTE con fecha pasada
+        // (por si el scheduler aún no corrió hoy). De esta forma siempre es correcto.
         if (usuario != null && usuario.getRol() == RolUsuario.EJECUTIVO) {
-            lista = seguimientoRepository.findByEjecutivoIdAndEstadoAndFechaProgramadaBefore(
-                    usuario.getId(), EstadoSeguimiento.PENDIENTE, hoy);
+            lista = seguimientoRepository.findVencidosByEjecutivo(usuario.getId(), hoy);
         } else {
-            lista = seguimientoRepository.findByEstadoAndFechaProgramadaBefore(EstadoSeguimiento.PENDIENTE, hoy);
+            lista = seguimientoRepository.findVencidos(hoy);
         }
 
         return mapear(lista);
+    }
+
+    /**
+     * Cambia en bulk PENDIENTE → VENCIDO para seguimientos cuya fecha_programada
+     * ya pasó. Llamado por VencimientoScheduler. Retorna la cantidad actualizada.
+     */
+    @Transactional
+    public int marcarVencidos() {
+        return seguimientoRepository.marcarVencidos(
+                EstadoSeguimiento.PENDIENTE,
+                EstadoSeguimiento.VENCIDO,
+                LocalDate.now(),
+                LocalDateTime.now());
     }
 
     @Transactional(readOnly = true)

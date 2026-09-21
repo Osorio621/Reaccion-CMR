@@ -82,13 +82,14 @@ public class AuditEventListener implements PostInsertEventListener, PreUpdateEve
                 continue;
             }
 
+            String descripcion = generarDescripcionUpdate(tabla, propiedad, anterior, nuevo);
             // Borrado lógico: activo pasa de true a false
             if ("activo".equals(propiedad) && Boolean.TRUE.equals(anterior) && Boolean.FALSE.equals(nuevo)) {
                 insertarAuditoria(tabla, (Long) event.getId(), usuarioId, "DELETE_LOGICO",
-                        propiedad, aTexto(anterior), aTexto(nuevo), ip);
+                        propiedad, aTexto(anterior), aTexto(nuevo), ip, descripcion);
             } else {
                 insertarAuditoria(tabla, (Long) event.getId(), usuarioId, "UPDATE",
-                        propiedad, aTexto(anterior), aTexto(nuevo), ip);
+                        propiedad, aTexto(anterior), aTexto(nuevo), ip, descripcion);
             }
         }
 
@@ -103,22 +104,118 @@ public class AuditEventListener implements PostInsertEventListener, PreUpdateEve
             return;
         }
 
+        String descripcion = generarDescripcionInsert(tabla, event);
         insertarAuditoria(tabla, (Long) event.getId(), obtenerUsuarioId(), "INSERT",
-                null, null, null, obtenerIpAddress());
+                null, null, null, obtenerIpAddress(), descripcion);
     }
 
     private void insertarAuditoria(String tabla, Long registroId, Long usuarioId, String accion,
                                    String campo, String valorAnterior, String valorNuevo, String ip) {
+        insertarAuditoria(tabla, registroId, usuarioId, accion, campo, valorAnterior, valorNuevo, ip, null);
+    }
+
+    private void insertarAuditoria(String tabla, Long registroId, Long usuarioId, String accion,
+                                   String campo, String valorAnterior, String valorNuevo, String ip,
+                                   String descripcion) {
         try {
+            // Los hashes de contraseña nunca se escriben en la auditoría
+            if ("passwordHash".equals(campo)) {
+                valorAnterior = "***";
+                valorNuevo = "***";
+            }
+            if (descripcion == null) {
+                descripcion = generarDescripcionPorDefecto(tabla, registroId, accion, campo, valorAnterior, valorNuevo);
+            }
             jdbcTemplate.update(
                     "INSERT INTO auditoria (tabla_nombre, registro_id, usuario_id, accion, " +
-                            "campo_modificado, valor_anterior, valor_nuevo, ip_address) " +
-                            "VALUES (?, ?, ?, CAST(? AS accion_auditoria), ?, ?, ?, ?)",
-                    tabla, registroId, usuarioId, accion, campo, valorAnterior, valorNuevo, ip);
+                            "campo_modificado, valor_anterior, valor_nuevo, ip_address, descripcion) " +
+                            "VALUES (?, ?, ?, CAST(? AS accion_auditoria), ?, ?, ?, ?, ?)",
+                    tabla, registroId, usuarioId, accion, campo, valorAnterior, valorNuevo, ip, descripcion);
         } catch (Exception ex) {
             // La auditoría nunca debe interrumpir la operación de negocio
             log.error("No se pudo registrar auditoria para {}#{}: {}", tabla, registroId, ex.getMessage(), ex);
         }
+    }
+
+    private String generarDescripcionInsert(String tabla, PostInsertEvent event) {
+        Object[] estado = event.getState();
+        String[] props = event.getPersister().getPropertyNames();
+        String nombre = extraerNombre(props, estado);
+        String detalle = nombre != null ? " '" + nombre + "'" : "";
+        return "Creó registro en " + leible(tabla) + detalle + " (id: " + event.getId() + ")";
+    }
+
+    private String generarDescripcionUpdate(String tabla, String propiedad, Object anterior, Object nuevo) {
+        return "Cambió " + leibleCampo(propiedad) + " en " + leible(tabla) + ": de '" +
+                aTexto(anterior) + "' a '" + aTexto(nuevo) + "'";
+    }
+
+    private String generarDescripcionPorDefecto(String tabla, Long registroId, String accion,
+                                                String campo, String valorAnterior, String valorNuevo) {
+        if ("INSERT".equals(accion)) {
+            return "Creó registro en " + leible(tabla) + " (id: " + registroId + ")";
+        }
+        if ("DELETE_LOGICO".equals(accion)) {
+            return "Desactivó registro en " + leible(tabla) + " (id: " + registroId + ")";
+        }
+        if (campo != null) {
+            return "Cambió " + leibleCampo(campo) + " en " + leible(tabla) + " (id: " + registroId + "): de '" +
+                    COALESCE(valorAnterior) + "' a '" + COALESCE(valorNuevo) + "'";
+        }
+        return accion + " en " + leible(tabla) + " (id: " + registroId + ")";
+    }
+
+    private String COALESCE(String v) {
+        return v == null || v.isBlank() ? "vacío" : v;
+    }
+
+    private String extraerNombre(String[] props, Object[] estado) {
+        for (int i = 0; i < props.length; i++) {
+            String p = props[i].toLowerCase();
+            if (p.equals("nombre") || p.equals("razonsocial") || p.equals("empresa") ||
+                    p.equals("email") || p.equals("emailprincipal")) {
+                Object v = estado[i];
+                if (v != null && !v.toString().isBlank()) {
+                    return v.toString();
+                }
+            }
+        }
+        return null;
+    }
+
+    private String leible(String tabla) {
+        return switch (tabla) {
+            case "clientes" -> "cliente";
+            case "prospectos" -> "prospecto";
+            case "oportunidades" -> "oportunidad";
+            case "visitas" -> "visita";
+            case "seguimientos" -> "seguimiento";
+            case "ventas" -> "venta";
+            case "usuarios" -> "usuario";
+            case "contactos" -> "contacto";
+            case "catalogos" -> "catálogo";
+            default -> tabla;
+        };
+    }
+
+    private String leibleCampo(String campo) {
+        return switch (campo) {
+            case "nombre" -> "nombre";
+            case "apellido" -> "apellido";
+            case "email" -> "email";
+            case "emailPrincipal" -> "email principal";
+            case "razonSocial" -> "razón social";
+            case "telefono" -> "teléfono";
+            case "telefonoPrincipal" -> "teléfono principal";
+            case "estado" -> "estado";
+            case "activo" -> "estado activo";
+            case "fechaEstimadaCierre" -> "fecha estimada de cierre";
+            case "fechaCierreReal" -> "fecha de cierre real";
+            case "probabilidad" -> "probabilidad";
+            case "valor" -> "valor";
+            case "etapaId" -> "etapa";
+            default -> campo;
+        };
     }
 
     private Long obtenerUsuarioId() {

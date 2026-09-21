@@ -24,6 +24,7 @@ public interface AuditoriaMapper {
     @Mapping(target = "valorAnterior", source = "auditoria.valorAnterior")
     @Mapping(target = "valorNuevo", source = "auditoria.valorNuevo")
     @Mapping(target = "ipAddress", source = "auditoria.ipAddress")
+    @Mapping(target = "descripcion", source = "auditoria.descripcion")
     @Mapping(target = "createdAt", source = "auditoria.createdAt")
     AuditoriaResponse toResponse(Auditoria auditoria, Map<Long, String> usuariosNombres);
 }

@@ -20,5 +20,6 @@ public class AuditoriaResponse {
     private String valorAnterior;
     private String valorNuevo;
     private String ipAddress;
+    private String descripcion;
     private LocalDateTime createdAt;
 }
