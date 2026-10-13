@@ -42,6 +42,9 @@ public class Usuario {
     @Column(name = "foto_url")
     private String fotoUrl;
 
+    @Column(name = "foto_ruta", length = 500)
+    private String fotoRuta;
+
     @Builder.Default
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
@@ -51,6 +54,10 @@ public class Usuario {
 
     @Column(name = "alerta_inactividad")
     private LocalDateTime alertaInactividad;
+
+    @Builder.Default
+    @Column(name = "requiere_cambio_password", nullable = false)
+    private Boolean requiereCambioPassword = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

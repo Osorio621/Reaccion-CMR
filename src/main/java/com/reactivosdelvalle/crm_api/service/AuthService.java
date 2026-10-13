@@ -12,6 +12,7 @@ import com.reactivosdelvalle.crm_api.repository.TokenReseteoRepository;
 import com.reactivosdelvalle.crm_api.repository.UsuarioRepository;
 import com.reactivosdelvalle.crm_api.security.CustomUserDetailsService;
 import com.reactivosdelvalle.crm_api.security.JwtUtils;
+import com.reactivosdelvalle.crm_api.security.LoginAttemptService;
 import com.reactivosdelvalle.crm_api.security.UsuarioPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public class AuthService {
     private final TokenReseteoRepository tokenReseteoRepository;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptService loginAttemptService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
@@ -59,7 +61,8 @@ public class AuthService {
             UsuarioMapper usuarioMapper,
             TokenReseteoRepository tokenReseteoRepository,
             EmailService emailService,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            LoginAttemptService loginAttemptService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtils = jwtUtils;
         this.usuarioRepository = usuarioRepository;
@@ -68,10 +71,21 @@ public class AuthService {
         this.tokenReseteoRepository = tokenReseteoRepository;
         this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
+        // Verificar bloqueo por intentos fallidos previos
+        if (loginAttemptService.estaBloqueado(request.getEmail())) {
+            long minutos = loginAttemptService.minutosRestantes(request.getEmail());
+            log.warn("LOGIN BLOQUEADO: demasiados intentos fallidos - {}", request.getEmail());
+            throw new AppException(
+                    "Cuenta bloqueada por múltiples intentos fallidos. Intentá de nuevo en "
+                    + minutos + " minuto(s).",
+                    HttpStatus.TOO_MANY_REQUESTS, "CUENTA_BLOQUEADA");
+        }
+
         // Authenticate credentials
         Authentication authentication;
         try {
@@ -83,8 +97,11 @@ public class AuthService {
             throw ex;
         } catch (BadCredentialsException ex) {
             log.warn("LOGIN FALLIDO: credenciales incorrectas - {}", request.getEmail());
+            loginAttemptService.registrarFallo(request.getEmail());
             throw ex;
         }
+
+        loginAttemptService.registrarExito(request.getEmail());
 
         UsuarioPrincipal principal = (UsuarioPrincipal) authentication.getPrincipal();
         log.info("LOGIN EXITOSO: {} ({} - rol {})", principal.getUsername(),
@@ -109,6 +126,7 @@ public class AuthService {
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .usuario(usuarioResponse)
+                .requiereCambioPassword(Boolean.TRUE.equals(usuario.getRequiereCambioPassword()))
                 .build();
     }
 

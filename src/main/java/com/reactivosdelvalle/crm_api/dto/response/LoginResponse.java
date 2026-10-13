@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class LoginResponse {
     private String accessToken;
     private String refreshToken;
-    private String tokenType; // "Bearer"
+    private String tokenType;
     private UsuarioResponse usuario;
+    private boolean requiereCambioPassword;
 }

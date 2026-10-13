@@ -32,10 +32,11 @@ public class UsuarioPrincipal implements UserDetails {
     
     private final Collection<? extends GrantedAuthority> authorities;
 
+    @Getter
+    private final boolean requiereCambioPassword;
+
     public static UsuarioPrincipal create(Usuario usuario) {
-        // Prefixed with ROLE_ as required by Spring Security convention for hasRole()
         GrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + usuario.getRol().name());
-        
         return new UsuarioPrincipal(
                 usuario.getId(),
                 usuario.getEmail(),
@@ -43,7 +44,8 @@ public class UsuarioPrincipal implements UserDetails {
                 usuario.getNombre(),
                 usuario.getApellido(),
                 usuario.getRol(),
-                Collections.singletonList(authority)
+                Collections.singletonList(authority),
+                Boolean.TRUE.equals(usuario.getRequiereCambioPassword())
         );
     }
 
