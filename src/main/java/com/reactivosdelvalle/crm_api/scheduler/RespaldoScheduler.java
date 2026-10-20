@@ -86,7 +86,9 @@ public class RespaldoScheduler {
 
     private String extraerMarcaDeTiempo(String nombreArchivo) {
         // Formato: respaldo_HCG_yyyy-MM-dd_HH-mm-ss.dump
+        // El timestamp ocupa los últimos 19 caracteres antes de la extensión;
+        // usar lastIndexOf('_') solo devuelve la parte de hora, no la fecha completa.
         String sinExtension = nombreArchivo.substring(0, nombreArchivo.length() - ".dump".length());
-        return sinExtension.substring(sinExtension.lastIndexOf('_') + 1);
+        return sinExtension.substring("respaldo_HCG_".length());
     }
 }

@@ -46,10 +46,10 @@ public class ReportController {
                 formato);
 
         MediaType mediaType = switch (formato) {
-            case "csv" -> MediaType.parseMediaType("text/csv");
+            case "csv"  -> MediaType.parseMediaType("text/csv");
             case "json" -> MediaType.APPLICATION_JSON;
             case "xlsx" -> MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            case "pdf" -> MediaType.parseMediaType("application/pdf");
+            case "pdf"  -> MediaType.parseMediaType("application/pdf");
             default -> MediaType.APPLICATION_OCTET_STREAM;
         };
 

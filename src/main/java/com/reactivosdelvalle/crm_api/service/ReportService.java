@@ -1,5 +1,20 @@
 package com.reactivosdelvalle.crm_api.service;
 
+import com.itextpdf.io.font.PdfEncodings;
+import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.colors.DeviceRgb;
+import com.itextpdf.kernel.font.PdfFont;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.kernel.geom.PageSize;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.borders.Border;
+import com.itextpdf.layout.element.Paragraph;
+import com.itextpdf.layout.element.Table;
+import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.layout.properties.UnitValue;
 import com.opencsv.CSVWriter;
 import com.reactivosdelvalle.crm_api.dto.request.ReportExportRequest;
 import com.reactivosdelvalle.crm_api.entity.RolUsuario;
@@ -18,6 +33,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -62,10 +79,11 @@ public class ReportService {
         List<?> datos = obtenerDatos(tipo, request);
 
         return switch (formato) {
-            case "csv" -> generarCsv(datos);
+            case "csv"  -> generarCsv(datos, tipo);
             case "json" -> generarJson(datos);
             case "xlsx" -> generarXlsx(datos, tipo);
-            default -> throw new IllegalArgumentException("Formato no soportado: " + formato + ". Use: csv, json, xlsx");
+            case "pdf"  -> generarPdf(datos, tipo, request);
+            default -> throw new IllegalArgumentException("Formato no soportado: " + formato + ". Use: csv, json, xlsx, pdf");
         };
     }
 
@@ -185,13 +203,12 @@ public class ReportService {
         return row[index] != null ? row[index].toString() : "";
     }
 
-    private byte[] generarCsv(List<?> datos) {
+    private byte[] generarCsv(List<?> datos, String tipo) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
              OutputStreamWriter writer = new OutputStreamWriter(baos);
              CSVWriter csvWriter = new CSVWriter(writer)) {
-            String[] headers = obtenerHeaders(obtenerTipo(datos));
-            csvWriter.writeNext(headers);
-            String tipo = obtenerTipo(datos);
+            // Los headers se escriben siempre; un resultado vacío sigue siendo un CSV válido
+            csvWriter.writeNext(obtenerHeaders(tipo));
             for (Object obj : datos) {
                 csvWriter.writeNext(extraerValores(obj, tipo));
             }
@@ -201,17 +218,6 @@ public class ReportService {
             log.error("Error generando CSV", e);
             throw new RuntimeException("Error generando CSV: " + e.getMessage());
         }
-    }
-
-    private String obtenerTipo(List<?> datos) {
-        if (datos.isEmpty()) return "";
-        Object first = datos.get(0);
-        if (first instanceof VentaExportRow) return "ventas";
-        if (first instanceof ClienteExportRow) return "clientes";
-        if (first instanceof OportunidadExportRow) return "oportunidades";
-        if (first instanceof PipelineExportRow) return "pipeline";
-        if (first instanceof ProspectoExportRow) return "prospectos";
-        return "";
     }
 
     private byte[] generarJson(List<?> datos) {
@@ -306,6 +312,89 @@ public class ReportService {
                     pr.etapa(), pr.origen(), pr.fechaCreacion()};
         }
         return new String[]{};
+    }
+
+    private byte[] generarPdf(List<?> datos, String tipo, ReportExportRequest request) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter pdfWriter = new PdfWriter(baos);
+            PdfDocument pdfDoc = new PdfDocument(pdfWriter);
+            Document document = new Document(pdfDoc, PageSize.A4.rotate());
+            document.setMargins(36, 36, 50, 36);
+
+            PdfFont negrita = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD, PdfEncodings.CP1252);
+            PdfFont normal  = PdfFontFactory.createFont(StandardFonts.HELVETICA, PdfEncodings.CP1252);
+
+            DeviceRgb azulCrm  = new DeviceRgb(27, 58, 92);
+            DeviceRgb azulFila = new DeviceRgb(232, 240, 254);
+            DeviceRgb grisTexto = new DeviceRgb(100, 100, 100);
+
+            // Encabezado
+            float[] unaColumna = {1f};
+            Table encabezado = new Table(UnitValue.createPercentArray(unaColumna)).useAllAvailableWidth();
+            encabezado.addCell(new com.itextpdf.layout.element.Cell()
+                .add(new Paragraph("REACCION CRM").setFont(negrita).setFontSize(18).setFontColor(ColorConstants.WHITE))
+                .add(new Paragraph("Resumen Ejecutivo - " + capitalize(tipo))
+                    .setFont(normal).setFontSize(11).setFontColor(ColorConstants.WHITE))
+                .setBackgroundColor(azulCrm).setPadding(14).setBorder(Border.NO_BORDER));
+            document.add(encabezado);
+
+            // Filtros aplicados
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            StringBuilder filtrosStr = new StringBuilder("Generado: ").append(LocalDate.now().format(fmt));
+            if (request.getDesde() != null)
+                filtrosStr.append("   |   Desde: ").append(request.getDesde().format(fmt));
+            if (request.getHasta() != null)
+                filtrosStr.append("   |   Hasta: ").append(request.getHasta().format(fmt));
+            if (request.getEstado() != null)
+                filtrosStr.append("   |   Estado: ").append(request.getEstado());
+
+            document.add(new Paragraph(filtrosStr.toString())
+                .setFont(normal).setFontSize(8).setFontColor(grisTexto)
+                .setMarginTop(6).setMarginBottom(8));
+
+            // Tabla
+            String[] headers = obtenerHeaders(tipo);
+            float[] porcentajes = new float[headers.length];
+            Arrays.fill(porcentajes, 1f);
+            Table tabla = new Table(UnitValue.createPercentArray(porcentajes)).useAllAvailableWidth();
+
+            for (String header : headers) {
+                tabla.addHeaderCell(new com.itextpdf.layout.element.Cell()
+                    .add(new Paragraph(header).setFont(negrita).setFontSize(8).setFontColor(ColorConstants.WHITE))
+                    .setBackgroundColor(azulCrm).setPadding(5));
+            }
+
+            boolean par = false;
+            for (Object obj : datos) {
+                String[] valores = extraerValores(obj, tipo);
+                for (String valor : valores) {
+                    com.itextpdf.layout.element.Cell celda = new com.itextpdf.layout.element.Cell()
+                        .add(new Paragraph(valor != null ? valor : "").setFont(normal).setFontSize(8))
+                        .setPadding(4);
+                    if (par) celda.setBackgroundColor(azulFila);
+                    tabla.addCell(celda);
+                }
+                par = !par;
+            }
+
+            if (datos.isEmpty()) {
+                tabla.addCell(new com.itextpdf.layout.element.Cell(1, headers.length)
+                    .add(new Paragraph("Sin resultados para los filtros seleccionados.")
+                        .setFont(normal).setFontSize(9).setTextAlignment(TextAlignment.CENTER))
+                    .setPadding(14));
+            }
+
+            document.add(tabla);
+
+            document.add(new Paragraph("Total: " + datos.size() + " registro(s)")
+                .setFont(normal).setFontSize(8).setFontColor(grisTexto).setMarginTop(6));
+
+            document.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            log.error("Error generando PDF", e);
+            throw new RuntimeException("Error generando PDF: " + e.getMessage());
+        }
     }
 
     private String capitalize(String str) {

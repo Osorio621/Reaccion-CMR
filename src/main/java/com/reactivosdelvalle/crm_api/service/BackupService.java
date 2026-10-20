@@ -5,12 +5,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class BackupService {
@@ -88,20 +91,35 @@ public class BackupService {
         Map<String, String> env = pb.environment();
         env.put("PGPASSWORD", password);
 
-        // Redirigir errores de pg_dump al log del sistema
-        pb.redirectErrorStream(true);
-
         try {
             Process process = pb.start();
-            
-            // Esperar que termine la ejecución
-            int exitCode = process.waitFor();
+
+            // Consumir stderr en un hilo separado para evitar deadlock por buffer lleno.
+            // Con -v pg_dump escribe mucho; si nadie lee, el OS bloquea el proceso
+            // y waitFor() nunca termina.
+            Thread stderrConsumer = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        logger.debug("pg_dump: {}", line);
+                    }
+                } catch (IOException ignored) {}
+            });
+            stderrConsumer.setDaemon(true);
+            stderrConsumer.start();
+
+            boolean termino = process.waitFor(2, TimeUnit.HOURS);
+            if (!termino) {
+                process.destroyForcibly();
+                throw new RuntimeException("pg_dump superó el tiempo límite de 2 horas");
+            }
+
+            int exitCode = process.exitValue();
             if (exitCode == 0) {
                 logger.info("Respaldo completado con éxito. Archivo: {}", backupFileName);
                 return backupFileName;
             } else {
-                // Si pg_dump no está instalado o falla en el host
-                logger.error("pg_dump falló con código de salida: {}. Verifique que las herramientas de PostgreSQL estén instaladas en el sistema.", exitCode);
+                logger.error("pg_dump falló con código de salida: {}. Verifique que pg_dump esté instalado en el servidor.", exitCode);
                 throw new RuntimeException("pg_dump falló con código " + exitCode);
             }
         } catch (IOException | InterruptedException e) {
